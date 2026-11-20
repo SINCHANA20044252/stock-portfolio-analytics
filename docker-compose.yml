@@ -1,0 +1,44 @@
+# Run everything:   cp .env.example .env   (fill SECRET_KEY and POSTGRES_PASSWORD)   then   docker compose up --build
+# App:  http://localhost:8080      (nginx serves the React build and proxies /api to the API: one origin, so cookies are first-party)
+# There are no default passwords in this file. Compose refuses to start until they are set.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: portfolio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: portfolio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      ENV: ${ENV:-production}
+      DATABASE_URL: postgresql+psycopg2://portfolio:${POSTGRES_PASSWORD}@db:5432/portfolio
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}   # false only because local compose is plain http; use true behind https
+      TRUST_PROXY: "true"
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-yahoo}
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
